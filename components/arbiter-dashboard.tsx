@@ -165,7 +165,7 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
   const apiDotClass = apiHealth === "healthy" ? "ok" : apiHealth === "degraded" ? "warn" : "bad";
 
   return (
-    <main className="dashRoot">
+    <section className="dashRoot" role="main">
       <header className="topBar">
         <div>
           <div className="wordmark">Hamduk Labs Sentinel</div>
@@ -329,6 +329,6 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
       <footer className="stickyDisclaimer">
         Statistical analysis only. All findings require human adjudication. This system does not determine guilt.
       </footer>
-    </main>
+    </section>
   );
 }
