@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
 import { AnalysisConsole } from "./analysis-console";
+import { KPICards } from "./kpi-cards";
+import { MetricsAnalyzer } from "./metrics-analyzer";
+import { GameAnalysisDeepDive } from "./game-analysis-deep-dive";
+import { PlayerProfileAnalysis } from "./player-profile-analysis";
 
 type DashboardPage = "command" | "deep-dive" | "player" | "report" | "admin";
 type RiskTier = "LOW" | "MODERATE" | "ELEVATED" | "HIGH_STATISTICAL_ANOMALY";
@@ -57,23 +60,21 @@ type Props = {
 };
 
 const RISK_CLASS: Record<RiskTier, string> = {
-  LOW: "riskLow",
-  MODERATE: "riskModerate",
-  ELEVATED: "riskElevated",
-  HIGH_STATISTICAL_ANOMALY: "riskHigh",
+  LOW: "risk-low",
+  MODERATE: "risk-moderate",
+  ELEVATED: "risk-elevated",
+  HIGH_STATISTICAL_ANOMALY: "risk-high",
 };
 
 function normalizeRiskTier(value: string): RiskTier | null {
-  if (value === "LOW" || value === "MODERATE" || value === "ELEVATED" || value === "HIGH_STATISTICAL_ANOMALY") {
-    return value;
+  if (["LOW", "MODERATE", "ELEVATED", "HIGH_STATISTICAL_ANOMALY"].includes(value)) {
+    return value as RiskTier;
   }
   return null;
 }
 
 function Sparkline({ values }: { values: number[] }) {
-  if (!values.length) {
-    return <div className="muted">None</div>;
-  }
+  if (!values.length) return null;
   const points = values
     .map((v, i) => {
       const x = (i / Math.max(1, values.length - 1)) * 100;
@@ -81,24 +82,16 @@ function Sparkline({ values }: { values: number[] }) {
       return `${x},${y}`;
     })
     .join(" ");
-
-  return (
-    <svg viewBox="0 0 100 100" className="sparkline" aria-hidden="true">
-      <polyline points={points} />
-    </svg>
-  );
+  return <svg viewBox="0 0 100 100" className="sparkline" aria-hidden="true"><polyline points={points} /></svg>;
 }
 
-function RiskPill({ tier }: { tier: RiskTier | null }) {
-  if (!tier) {
-    return <span className="riskPill">NONE</span>;
-  }
-  return <span className={`riskPill ${RISK_CLASS[tier]}`}>{tier.replaceAll("_", " ")}</span>;
+function RiskBadge({ tier }: { tier: RiskTier | null }) {
+  if (!tier) return <span className={`risk-badge risk-none`}>NO DATA</span>;
+  return <span className={`risk-badge ${RISK_CLASS[tier]}`}>{tier.replaceAll("_", " ")}</span>;
 }
 
 function formatClock(now: Date | null): string {
-  if (!now) return "--:--:--";
-  return now.toLocaleTimeString();
+  return now ? now.toLocaleTimeString() : "--:--:--";
 }
 
 export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedAt, supabaseReady, missingEnvVars }: Props) {
@@ -118,220 +111,101 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
 
   useEffect(() => {
     let cancelled = false;
-
     async function refreshFeed() {
       try {
         const res = await fetch(`${apiBase}/v1/dashboard-feed?limit=200`, { cache: "no-store" });
         if (!res.ok) return;
         const feed = (await res.json()) as DashboardFeedResponse;
         if (cancelled) return;
-
         const games = Array.isArray(feed.games) ? feed.games : [];
         const alerts = Array.isArray(feed.alerts) ? feed.alerts : [];
-
         setFeedGames(games);
         setFeedAlerts(alerts);
         setFeedSummary(feed.summary ?? null);
         setSelectedGameId((prev) => (prev && games.some((g) => g.game_id === prev) ? prev : games[0]?.game_id ?? null));
-      } catch {
-        // Keep current state on network/server error.
-      }
+      } catch { /* Keep state */ }
     }
-
     refreshFeed();
     const poll = setInterval(refreshFeed, 20000);
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-    };
+    return () => { cancelled = true; clearInterval(poll); };
   }, [apiBase]);
 
   const games = useMemo(() => [...feedGames].sort((a, b) => b.weighted_risk_score - a.weighted_risk_score), [feedGames]);
-  const selectedGame = games.find((g) => g.game_id === selectedGameId) ?? null;
-  const awaitingReview = Math.max(0, feedAlerts.filter((a) => !reviewedAlerts[a.id]).length);
+  const awaitingReview = feedAlerts.filter((a) => !reviewedAlerts[a.id]).length;
 
-  const navItems: Array<{ id: DashboardPage; label: string }> = [
-    { id: "command", label: "Command Center" },
-    { id: "deep-dive", label: "Game Deep Dive" },
-    { id: "player", label: "Player Profile" },
-    { id: "report", label: "Report Composer" },
-    { id: "admin", label: "System Config" },
+  const navItems: Array<{ id: DashboardPage; label: string; icon: string }> = [
+    { id: "command", label: "Command Center", icon: "📊" },
+    { id: "deep-dive", label: "Game Deep Dive", icon: "🔍" },
+    { id: "player", label: "Player Profile", icon: "👤" },
+    { id: "report", label: "Report", icon: "📄" },
+    { id: "admin", label: "Settings", icon: "⚙️" },
   ];
 
-  const apiDotClass = apiHealth === "healthy" ? "ok" : apiHealth === "degraded" ? "warn" : "bad";
+  const apiHealthColor = apiHealth === "healthy" ? "text-success" : apiHealth === "degraded" ? "text-warning" : "text-danger";
 
   return (
-    <main className="dashRoot">
-      <header className="topBar">
-        <div>
-          <div className="wordmark">Hamduk Labs Sentinel</div>
-          <div className="muted">Forensic Arbiter Assistant</div>
-        </div>
-        <div className="topCenter">
-          <div className="tourney">Sentinel Tournament - Live</div>
-          <div className="monoData">
-            {formatClock(now)} | Round remaining: None
+    <div className="dashboard-container">
+      <nav className="nav-bar">
+        <div className="nav-brand">
+          <div className="nav-logo">🛡️</div>
+          <div className="nav-title">
+            <h1>Sentinel</h1>
+            <p>Anti-Cheat Arbiter</p>
           </div>
         </div>
-        <div className="topRight">
-          <div className="statusRow">
-            <span className={`statusDot ${apiDotClass}`}>API</span>
-            <span className={`statusDot ${supabaseReady ? "ok" : "bad"}`}>Supabase</span>
-            <span className="statusDot ok">Stockfish</span>
-            <span className="statusDot warn">DGT Feed</span>
-          </div>
-          <div className="arbiterMeta">
-            <span className="monoData">Latency: {apiLatencyMs ?? "None"} ms</span>
-            <span className="roleBadge">Checked {apiCheckedAt ? new Date(apiCheckedAt).toLocaleTimeString() : "None"}</span>
-            <button className="escalateBtn" type="button">Emergency Escalation</button>
+        <div className="nav-center">
+          <div className="nav-time">{formatClock(now)}</div>
+          <div className={`nav-status ${apiHealthColor}`}>
+            <span className="status-dot"></span>
+            {apiHealth === "healthy" ? "System Healthy" : apiHealth === "degraded" ? "Degraded" : "Offline"}
           </div>
         </div>
-      </header>
-
-      <nav className="dashNav">
-        {navItems.map((item) => (
-          <button key={item.id} className={page === item.id ? "navBtn active" : "navBtn"} onClick={() => setPage(item.id)} type="button">
-            {item.label}
-          </button>
-        ))}
+        <div className="nav-end">
+          {missingEnvVars.length > 0 && <span className="text-warning">⚠️ Config Issue</span>}
+          {!supabaseReady && <span className="text-danger">🔴 DB Offline</span>}
+        </div>
       </nav>
 
-      {page === "command" ? (
-        <section className="commandGrid">
-          <section className="panel panelMain">
-            <div className="panelHead">
-              <h2>Live Game Feed</h2>
-              <div className="muted">Sorted by weighted risk score</div>
-            </div>
-            {games.length === 0 ? (
-              <div className="muted">None</div>
-            ) : (
-              <div className="gameGrid">
-                {games.map((g, idx) => {
-                  const tier = normalizeRiskTier(g.risk_tier);
-                  return (
-                    <article key={g.game_id} className="gameCard" onClick={() => { setSelectedGameId(g.game_id); setPage("deep-dive"); }}>
-                      <div className="cardRow">
-                        <div>
-                          <strong>{g.player_id || "None"}</strong>
-                          <div className="muted">FIDE {g.player_id || "None"} | {g.official_elo || "None"}</div>
-                        </div>
-                        <RiskPill tier={tier} />
-                      </div>
-                      <div className="muted">Event {g.event_id || "None"} | Move {g.move_number || "None"}</div>
-                      <Sparkline values={g.sparkline || []} />
-                      <div className="riskBar"><span style={{ width: `${Math.round((g.weighted_risk_score || 0) * 100)}%` }} /></div>
-                      <div className="monoData">Weighted Risk: {Number.isFinite(g.weighted_risk_score) ? g.weighted_risk_score.toFixed(3) : "None"}</div>
-                      <div className="muted">Board: {idx + 1} | Audit: {g.audit_id || "None"}</div>
-                    </article>
-                  );
-                })}
+      <aside className="sidebar">
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <button key={item.id} onClick={() => setPage(item.id)} className={`nav-item ${page === item.id ? "active" : ""}`}>
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+              {item.id === "command" && awaitingReview > 0 && <span className="badge">{awaitingReview}</span>}
+            </button>
+          ))}
+        </nav>
+        {feedSummary && (
+          <div className="sidebar-summary">
+            <h3>Today's Summary</h3>
+            <div className="summary-stat"><span>Games Analyzed</span><span>{feedSummary.total_games_analyzed_today}</span></div>
+            <div className="summary-stat"><span>Flagged</span><span className="text-warning">{feedSummary.games_elevated_or_above}</span></div>
+            <div className="summary-stat"><span>Awaiting Review</span><span className="text-danger">{feedSummary.awaiting_review_count}</span></div>
+          </div>
+        )}
+      </aside>
+
+      <main className="main-content">
+        {page === "command" && (
+          <>
+            <section className="page-command">
+              <div className="page-header">
+                <h2>Command Center</h2>
+                <p>Real-time game analysis and monitoring</p>
               </div>
-            )}
-          </section>
-
-          <aside className="panel panelSide">
-            <div className="panelHead">
-              <h2>Alert Queue</h2>
-              <div className="muted">Chronological triggered signals</div>
-            </div>
-            {feedAlerts.length === 0 ? (
-              <div className="muted">None</div>
-            ) : (
-              <div className="alertList">
-                {feedAlerts.map((a) => (
-                  <article className="alertItem" key={a.id}>
-                    <div className="cardRow">
-                      <strong>{a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : "None"}</strong>
-                      <span className={reviewedAlerts[a.id] ? "miniBadge reviewed" : "miniBadge pending"}>
-                        {reviewedAlerts[a.id] ? "Reviewed" : "Pending"}
-                      </span>
-                    </div>
-                    <div>{a.player_id || "None"}</div>
-                    <div className="muted">{a.layer || "None"}: {(a.score ?? 0).toFixed(2)} / {(a.threshold ?? 0).toFixed(2)}</div>
-                    <div>{a.description || "None"}</div>
-                    <div className="buttonRow">
-                      <button type="button" className="ghostBtn" onClick={() => setReviewedAlerts((prev) => ({ ...prev, [a.id]: true }))}>Mark Reviewed</button>
-                      <button type="button" className="warnBtn">Escalate</button>
-                    </div>
-                  </article>
-                ))}
+              <div className="kpi-section"><KPICards /></div>
+              <div className="charts-section"><MetricsAnalyzer /></div>
+              <div className="game-feed-section">
+                <h3>Recent Games</h3>
+                <AnalysisConsole games={games} selectedGameId={selectedGameId} onSelectGame={setSelectedGameId} />
               </div>
-            )}
-            <div className="statsRow">
-              <div><span className="monoData">{feedSummary?.total_games_analyzed_today ?? "None"}</span><div className="muted">Games Today</div></div>
-              <div><span className="monoData">{feedSummary?.games_elevated_or_above ?? "None"}</span><div className="muted">Elevated+</div></div>
-              <div><span className="monoData">{feedSummary ? awaitingReview : "None"}</span><div className="muted">Awaiting Review</div></div>
-              <div><span className="monoData">{feedSummary ? feedSummary.average_regan_z_score.toFixed(3) : "None"}</span><div className="muted">Avg Regan Z</div></div>
-            </div>
-          </aside>
-
-          <section className="panel pgnWorkbench">
-            <div className="panelHead">
-              <h2>PGN Analysis Workbench</h2>
-              <div className="muted">Run direct PGN analysis from the dashboard</div>
-            </div>
-            <AnalysisConsole apiBase={apiBase} />
-          </section>
-        </section>
-      ) : null}
-
-      {page === "deep-dive" ? (
-        <section className="stacked">
-          <article className="panel">
-            <div className="panelHead">
-              <h2>Game Deep Dive</h2>
-              <RiskPill tier={selectedGame ? normalizeRiskTier(selectedGame.risk_tier) : null} />
-            </div>
-            {selectedGame ? (
-              <div className="muted">
-                Player: {selectedGame.player_id || "None"} | Event: {selectedGame.event_id || "None"} | Move: {selectedGame.move_number || "None"} |
-                Confidence: {Number.isFinite(selectedGame.confidence) ? selectedGame.confidence.toFixed(3) : "None"} |
-                Audit ID: {selectedGame.audit_id || "None"}
-              </div>
-            ) : (
-              <div className="muted">None</div>
-            )}
-          </article>
-          <article className="panel">
-            <h3>Charts</h3>
-            <div className="muted">None</div>
-          </article>
-          <article className="panel">
-            <h3>Move-by-Move Table</h3>
-            <div className="muted">None</div>
-          </article>
-          <article className="panel">
-            <h3>Arbiter Notes</h3>
-            <div className="muted">None</div>
-          </article>
-        </section>
-      ) : null}
-
-      {page === "player" ? (
-        <section className="stacked">
-          <article className="panel"><h2>Player Profile</h2><div className="muted">None</div></article>
-        </section>
-      ) : null}
-
-      {page === "report" ? (
-        <section className="stacked">
-          <article className="panel"><h2>Report Composer</h2><div className="muted">None</div></article>
-        </section>
-      ) : null}
-
-      {page === "admin" ? (
-        <section className="stacked">
-          <article className="panel">
-            <h2>System Config</h2>
-            <div className="muted">Missing env: {missingEnvVars.length ? missingEnvVars.join(", ") : "None"}</div>
-          </article>
-        </section>
-      ) : null}
-
-      <footer className="stickyDisclaimer">
-        Statistical analysis only. All findings require human adjudication. This system does not determine guilt.
-      </footer>
-    </main>
+            </section>
+          </>
+        )}
+        {page === "deep-dive" && <GameAnalysisDeepDive />}
+        {page === "player" && <PlayerProfileAnalysis />}
+      </main>
+    </div>
   );
 }
