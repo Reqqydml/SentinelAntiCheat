@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { AnalysisConsole } from "./analysis-console";
+import { KPICards } from "./kpi-cards";
+import { MetricsAnalyzer } from "./metrics-analyzer";
+import { GameAnalysisDeepDive } from "./game-analysis-deep-dive";
+import { PlayerProfileAnalysis } from "./player-profile-analysis";
 
 type DashboardPage = "command" | "deep-dive" | "player" | "report" | "admin";
 type RiskTier = "LOW" | "MODERATE" | "ELEVATED" | "HIGH_STATISTICAL_ANOMALY";
@@ -197,7 +201,25 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
       </nav>
 
       {page === "command" ? (
-        <section className="commandGrid">
+        <section className="stacked">
+          {/* KPI Metrics Section */}
+          <div className="panel">
+            <div className="panelHead">
+              <h2>Key Performance Indicators</h2>
+              <div className="muted">Real-time analytics overview</div>
+            </div>
+            <KPICards />
+          </div>
+
+          {/* Detailed Charts Section */}
+          <div>
+            <div className="panelHead" style={{ paddingLeft: "0.85rem", marginBottom: "0.8rem" }}>
+              <h2>Metrics & Analysis</h2>
+              <div className="muted">Comprehensive performance dashboard</div>
+            </div>
+            <MetricsAnalyzer />
+          </div>
+
           <section className="panel panelMain">
             <div className="panelHead">
               <h2>Live Game Feed</h2>
@@ -265,6 +287,7 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
               <div><span className="monoData">{feedSummary ? feedSummary.average_regan_z_score.toFixed(3) : "None"}</span><div className="muted">Avg Regan Z</div></div>
             </div>
           </aside>
+          </section>
 
           <section className="panel pgnWorkbench">
             <div className="panelHead">
@@ -278,39 +301,13 @@ export function ArbiterDashboard({ apiBase, apiHealth, apiLatencyMs, apiCheckedA
 
       {page === "deep-dive" ? (
         <section className="stacked">
-          <article className="panel">
-            <div className="panelHead">
-              <h2>Game Deep Dive</h2>
-              <RiskPill tier={selectedGame ? normalizeRiskTier(selectedGame.risk_tier) : null} />
-            </div>
-            {selectedGame ? (
-              <div className="muted">
-                Player: {selectedGame.player_id || "None"} | Event: {selectedGame.event_id || "None"} | Move: {selectedGame.move_number || "None"} |
-                Confidence: {Number.isFinite(selectedGame.confidence) ? selectedGame.confidence.toFixed(3) : "None"} |
-                Audit ID: {selectedGame.audit_id || "None"}
-              </div>
-            ) : (
-              <div className="muted">None</div>
-            )}
-          </article>
-          <article className="panel">
-            <h3>Charts</h3>
-            <div className="muted">None</div>
-          </article>
-          <article className="panel">
-            <h3>Move-by-Move Table</h3>
-            <div className="muted">None</div>
-          </article>
-          <article className="panel">
-            <h3>Arbiter Notes</h3>
-            <div className="muted">None</div>
-          </article>
+          <GameAnalysisDeepDive gameId={selectedGameId} />
         </section>
       ) : null}
 
       {page === "player" ? (
         <section className="stacked">
-          <article className="panel"><h2>Player Profile</h2><div className="muted">None</div></article>
+          <PlayerProfileAnalysis playerId={selectedGame?.player_id} />
         </section>
       ) : null}
 
