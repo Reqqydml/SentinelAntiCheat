@@ -11,7 +11,7 @@ export async function GET() {
     // Get risk tier distribution
     const { data: analyses } = await supabase
       .from("analyses")
-      .select("risk_tier, confidence, weighted_risk_score")
+      .select("risk_tier, confidence, weighted_risk_score, created_at")
       .limit(1000);
 
     // Get engine evaluation data
